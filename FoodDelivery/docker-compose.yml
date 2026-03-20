@@ -1,0 +1,127 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:latest
+    container_name: food_delivery_mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: food_delivery
+    networks:
+      - food-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # RabbitMQ Message Queue
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: food_delivery_rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    networks:
+      - food-network
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    container_name: food_delivery_gateway
+    ports:
+      - "3000:3000"
+    environment:
+      GATEWAY_PORT: 3000
+      MONGODB_URI: mongodb://mongodb:27017/food_delivery
+      ORDER_SERVICE_URL: http://order-service:3001
+      RESTAURANT_SERVICE_URL: http://restaurant-service:3002
+      DELIVERY_SERVICE_URL: http://delivery-service:3003
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - food-network
+    volumes:
+      - ./public:/app/public
+
+  # Order Service
+  order-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+    container_name: food_delivery_order
+    ports:
+      - "3001:3001"
+    environment:
+      ORDER_SERVICE_PORT: 3001
+      MONGODB_URI: mongodb://mongodb:27017/food_delivery
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - food-network
+
+  # Restaurant Service
+  restaurant-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+    container_name: food_delivery_restaurant
+    ports:
+      - "3002:3002"
+    environment:
+      RESTAURANT_SERVICE_PORT: 3002
+      MONGODB_URI: mongodb://mongodb:27017/food_delivery
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - food-network
+
+  # Delivery Service
+  delivery-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+    container_name: food_delivery_delivery
+    ports:
+      - "3003:3003"
+    environment:
+      DELIVERY_SERVICE_PORT: 3003
+      MONGODB_URI: mongodb://mongodb:27017/food_delivery
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - food-network
+
+volumes:
+  mongodb_data:
+
+networks:
+  food-network:
+    driver: bridge

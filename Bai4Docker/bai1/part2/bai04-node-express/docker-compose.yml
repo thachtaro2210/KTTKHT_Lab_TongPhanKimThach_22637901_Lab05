@@ -1,0 +1,6 @@
+services:
+  node-app:
+    build: .
+    container_name: bai04_node_express
+    ports:
+      - "3000:3000"

@@ -1,0 +1,12 @@
+services:
+  app:
+    build: ./app
+    container_name: compose_app
+    ports:
+      - "8080:8000"
+    volumes:
+      - app_data:/data
+    command: sh -c "echo started_at=$(date) >> /data/start.log && python -m http.server 8000"
+
+volumes:
+  app_data:
